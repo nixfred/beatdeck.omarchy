@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "id": "nixfred.beatdeck",
+  "name": "Beatdeck",
+  "version": "1.0.0",
+  "author": "Fred Nix",
+  "license": "MIT",
+  "description": "Beatbar's live spectrum as the trigger for the Living Media Cockpit \u2014 click for now playing, right click for the visuals",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Beatdeck",
+    "description": "Live PipeWire spectrum that opens the MPRIS now-playing cockpit on click",
+    "category": "Media",
+    "aliases": [
+      "audio-visualizer",
+      "cava",
+      "spectrum",
+      "media",
+      "now-playing"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "mode": "Aurora",
+      "width": 112,
+      "gain": 100,
+      "bassMotion": "Subtle",
+      "auroraPulse": true,
+      "showIdleLine": true
+    },
+    "schema": [
+      {
+        "key": "mode",
+        "type": "enum",
+        "label": "Visualization",
+        "options": [
+          "Garden",
+          "Mirror",
+          "Aurora"
+        ],
+        "defaultValue": "Aurora",
+        "description": "Right-click the widget to cycle modes."
+      },
+      {
+        "key": "width",
+        "type": "integer",
+        "label": "Width",
+        "min": 72,
+        "max": 220,
+        "step": 8,
+        "defaultValue": 112
+      },
+      {
+        "key": "gain",
+        "type": "integer",
+        "label": "Visual gain",
+        "min": 40,
+        "max": 250,
+        "step": 10,
+        "defaultValue": 100,
+        "description": "Mouse-wheel over Beatdeck to adjust."
+      },
+      {
+        "key": "bassMotion",
+        "type": "enum",
+        "label": "Bass motion",
+        "options": [
+          "Off",
+          "Subtle",
+          "Loose"
+        ],
+        "defaultValue": "Subtle",
+        "description": "Shake and pulse the spectrum when low-frequency transients hit."
+      },
+      {
+        "key": "auroraPulse",
+        "type": "boolean",
+        "label": "Aurora bass sweep",
+        "defaultValue": true,
+        "description": "Send a bass-strength pulse across Aurora from left to right."
+      },
+      {
+        "key": "showIdleLine",
+        "type": "boolean",
+        "label": "Show line when silent",
+        "defaultValue": true
+      }
+    ]
+  }
+}
