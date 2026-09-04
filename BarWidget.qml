@@ -86,7 +86,9 @@ BarWidget {
   onTitleChanged: refreshPosition()
 
   visible: true
-  implicitWidth: vertical ? barSize : Style.spaceReal(configuredWidth)
+  implicitWidth: vertical
+    ? barSize
+    : (stretch ? stretchedWidth : Style.spaceReal(configuredWidth))
   implicitHeight: vertical ? Style.spaceReal(configuredWidth) : barSize
 
   AlbumPalette {
@@ -150,6 +152,130 @@ BarWidget {
   readonly property bool auroraPulse: setting("auroraPulse", true) === true
   readonly property bool showIdleLine: setting("showIdleLine", true) === true
   readonly property bool showLabel: setting("showLabel", true) === true
+
+  // --------------------------------------------------------- elastic width
+  // The bar's three sections do not negotiate: LeftModules is a Row anchored
+  // to the left edge and CenterModules independently centres its own content
+  // over the whole bar, so nothing hands out leftover space. Beatdeck claims
+  // it manually — measure the gap between this widget's left edge and the
+  // leftmost centre-section module, and take what is left after the widgets
+  // that sit to its right in the left row.
+  //
+  // Loop-safe because none of the inputs depend on this widget's own width:
+  //   - our screen x is set by the *preceding* siblings in the Row
+  //   - the centre section is anchored to the bar, not to the left row
+  //   - trailing siblings are measured by implicitWidth, never by their x
+  //     (their x moves when we grow, their implicitWidth does not)
+
+  readonly property bool stretch: setting("stretch", true) === true
+  readonly property int stretchMinWidth: Math.max(24, Math.min(600,
+    Number(setting("minWidth", 96)) || 96))
+  readonly property int stretchMaxWidth: Math.max(stretchMinWidth, Math.min(4000,
+    Number(setting("maxWidth", 1600)) || 1600))
+  readonly property int stretchGap: Math.max(0, Math.min(200,
+    Number(setting("stretchGap", 14)) || 0))
+
+  // Seeded with the fixed width so the first frame is never zero-wide.
+  property real stretchedWidth: Style.spaceReal(configuredWidth)
+
+  function measureStretch() {
+    if (!stretch || vertical || !bar || !Array.isArray(bar.moduleSlots)) return
+
+    var minimum = Style.spaceReal(stretchMinWidth)
+    var maximum = Style.spaceReal(stretchMaxWidth)
+    var origin
+
+    try {
+      origin = mapToItem(null, 0, 0)
+    } catch (e) {
+      return
+    }
+    if (!origin) return
+
+    var centreLeft = -1
+    var trailing = 0
+
+    for (var i = 0; i < bar.moduleSlots.length; i++) {
+      var slot = bar.moduleSlots[i]
+      if (!slot || !slot.activeItem || !slot.activeItem.visible) continue
+      if (slot.activeItem === root) continue
+
+      var point
+      try {
+        point = slot.mapToItem(null, 0, 0)
+      } catch (e2) {
+        continue
+      }
+      if (!point) continue
+
+      if (slot.region === "center") {
+        // Only modules that actually sit to our right can bound us.
+        if (point.x + 1 < origin.x) continue
+        if (centreLeft < 0 || point.x < centreLeft) centreLeft = point.x
+      } else if (slot.region === "left" && point.x > origin.x) {
+        // Trailing left-row siblings: implicitWidth, not width — their x
+        // shifts when we grow, the space they need does not.
+        trailing += Math.max(0, Number(slot.implicitWidth) || 0)
+      }
+    }
+
+    // Nothing in the centre section: run to the right section instead, and
+    // failing that just keep the configured width.
+    var boundary = centreLeft
+    if (boundary < 0) {
+      var barPoint
+      try {
+        barPoint = bar.mapToItem(null, 0, 0)
+      } catch (e3) {
+        return
+      }
+      if (!barPoint) return
+      boundary = barPoint.x + bar.width
+    }
+
+    var available = boundary - origin.x - trailing - Style.spaceReal(stretchGap)
+    var next = Math.round(clamp(available, minimum, maximum))
+
+    // Sub-pixel churn would repaint the canvas every frame for nothing.
+    if (Math.abs(next - stretchedWidth) >= 1) stretchedWidth = next
+  }
+
+  onStretchChanged: measureStretch()
+  onStretchMinWidthChanged: measureStretch()
+  onStretchMaxWidthChanged: measureStretch()
+  onStretchGapChanged: measureStretch()
+  onXChanged: measureStretch()
+  onStretchedWidthChanged: visualization.requestPaint()
+
+  Component.onCompleted: measureStretch()
+
+  Connections {
+    target: root.bar
+    ignoreUnknownSignals: true
+    // A plugin added to or removed from any section reassigns moduleSlots.
+    function onModuleSlotsChanged() { settleTimer.restart() }
+    function onWidthChanged() { settleTimer.restart() }
+    function onBarConfigChanged() { settleTimer.restart() }
+  }
+
+  // Slots register before they have been laid out, so measure once the frame
+  // has settled rather than on the register itself.
+  Timer {
+    id: settleTimer
+    interval: 60
+    repeat: false
+    onTriggered: root.measureStretch()
+  }
+
+  // Safety net for the geometry changes QML gives us no signal for (a
+  // neighbour's label growing, a font or scale change mid-session). Cheap
+  // next to the canvas repaint that already runs at cava's frame rate.
+  Timer {
+    interval: 500
+    running: root.stretch && !root.vertical
+    repeat: true
+    onTriggered: root.measureStretch()
+  }
   readonly property string mode: {
     var value = String(setting("mode", "Aurora"))
     return ["Garden", "Mirror", "Aurora"].indexOf(value) >= 0 ? value : "Aurora"

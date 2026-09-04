@@ -31,7 +31,11 @@
       "gain": 100,
       "bassMotion": "Subtle",
       "auroraPulse": true,
-      "showIdleLine": true
+      "showIdleLine": true,
+      "stretch": true,
+      "minWidth": 96,
+      "maxWidth": 1600,
+      "stretchGap": 14
     },
     "schema": [
       {
@@ -53,7 +57,8 @@
         "min": 72,
         "max": 220,
         "step": 8,
-        "defaultValue": 112
+        "defaultValue": 112,
+        "description": "Fixed width. Ignored while Stretch is on."
       },
       {
         "key": "gain",
@@ -89,6 +94,42 @@
         "type": "boolean",
         "label": "Show line when silent",
         "defaultValue": true
+      },
+      {
+        "key": "stretch",
+        "type": "boolean",
+        "label": "Stretch to fill",
+        "defaultValue": true,
+        "description": "Grow to fill the gap between the left row and the centre section, and give the space back when a widget is added."
+      },
+      {
+        "key": "minWidth",
+        "type": "integer",
+        "label": "Minimum width",
+        "min": 24,
+        "max": 600,
+        "step": 8,
+        "defaultValue": 96,
+        "description": "How far Beatdeck will shrink before it stops giving ground."
+      },
+      {
+        "key": "maxWidth",
+        "type": "integer",
+        "label": "Maximum width",
+        "min": 96,
+        "max": 4000,
+        "step": 32,
+        "defaultValue": 1600
+      },
+      {
+        "key": "stretchGap",
+        "type": "integer",
+        "label": "Gap before centre",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "defaultValue": 14,
+        "description": "Clear space kept between Beatdeck and the centre section."
       }
     ]
   }
