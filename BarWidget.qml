@@ -10,8 +10,10 @@ BarWidget {
 
   readonly property var mediaService: bar && bar.shell
     ? bar.shell.serviceFor("pi.media") : null
-  readonly property var spectrum: bar && bar.shell
-    ? bar.shell.serviceFor("ryrobes.beatbar") : null
+  readonly property var spectrum: {
+    if (!bar || !bar.shell) return null
+    return bar.shell.serviceFor(moduleName) || bar.shell.serviceFor("ryrobes.beatbar")
+  }
   readonly property var activePlayer: mediaService ? mediaService.activePlayer : null
 
   readonly property bool hasMedia: activePlayer !== null
