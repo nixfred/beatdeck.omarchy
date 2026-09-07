@@ -845,7 +845,7 @@ BarWidget {
               anchors.centerIn: parent
               text: "󰎆"
               color: root.foreground
-              font.family: root.bar.fontFamily
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
               font.pixelSize: Style.font.displayLarge * 2
             }
           }
@@ -900,7 +900,7 @@ BarWidget {
           text: root.playing ? "NOW PLAYING" : "PAUSED"
           textFormat: Text.PlainText
           color: root.cockpitAccent
-          font.family: root.bar.fontFamily
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
           font.letterSpacing: Style.spaceReal(1.8)
@@ -911,7 +911,7 @@ BarWidget {
           text: root.title || "Nothing playing"
           textFormat: Text.PlainText
           color: root.foreground
-          font.family: root.bar.fontFamily
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
           font.pixelSize: Style.font.display
           font.bold: true
           maximumLineCount: 2
@@ -926,7 +926,7 @@ BarWidget {
           textFormat: Text.PlainText
           color: Qt.rgba(root.foreground.r, root.foreground.g,
             root.foreground.b, 0.72)
-          font.family: root.bar.fontFamily
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
           font.pixelSize: Style.font.bodySmall
           maximumLineCount: 1
           elide: Text.ElideRight
@@ -1000,7 +1000,7 @@ BarWidget {
               text: root.formatTime(root.trackPosition)
               color: Qt.rgba(root.foreground.r, root.foreground.g,
                 root.foreground.b, 0.6)
-              font.family: root.bar.fontFamily
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
               font.pixelSize: Style.font.caption
             }
             Item {
@@ -1013,7 +1013,7 @@ BarWidget {
                 Math.max(0, root.trackLength - root.trackPosition)) : "LIVE"
               color: Qt.rgba(root.foreground.r, root.foreground.g,
                 root.foreground.b, 0.6)
-              font.family: root.bar.fontFamily
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
               font.pixelSize: Style.font.caption
             }
           }
@@ -1065,7 +1065,7 @@ BarWidget {
         textFormat: Text.PlainText
         color: Qt.rgba(root.foreground.r, root.foreground.g,
           root.foreground.b, 0.4)
-        font.family: root.bar.fontFamily
+        font.family: root.bar ? root.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.caption
         opacity: root.artReveal
       }
