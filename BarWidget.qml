@@ -172,8 +172,15 @@ BarWidget {
   readonly property bool stretch: setting("stretch", true) === true
   readonly property int stretchMinWidth: Math.max(24, Math.min(600,
     Number(setting("minWidth", 96)) || 96))
-  readonly property int stretchMaxWidth: Math.max(stretchMinWidth, Math.min(4000,
-    Number(setting("maxWidth", 1600)) || 1600))
+  // Nothing playing means nothing to draw, and holding half an ultrawide bar
+  // blank serves no one. Collapse to the minimum so a neighbour that does have
+  // something to show (Burn Bar) can take the gap; claim it back the instant a
+  // track starts. Neighbours read this cap to size themselves, so it has to be
+  // the honest number rather than the configured ceiling.
+  readonly property int stretchMaxWidth: !hasMedia ? stretchMinWidth
+    : Math.max(stretchMinWidth, Math.min(4000,
+      Number(setting("maxWidth", 1600)) || 1600))
+  onHasMediaChanged: measureStretch()
   readonly property int stretchGap: Math.max(0, Math.min(200,
     Number(setting("stretchGap", 14)) || 0))
 
