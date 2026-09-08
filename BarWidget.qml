@@ -29,6 +29,19 @@ BarWidget {
   readonly property real bass: spectrum ? Number(spectrum.bass || 0) : 0
 
   property bool popupOpen: false
+
+  // About line identity. The manifest is the single source of truth for all
+  // three; constants are only a fallback for when the registry is not up.
+  readonly property var pluginManifest: {
+    var reg = bar && bar.shell ? bar.shell.pluginRegistry : null
+    return reg && reg.installedPlugins ? (reg.installedPlugins[moduleName] || null) : null
+  }
+  readonly property string pluginVersion: pluginManifest && pluginManifest.version
+    ? String(pluginManifest.version) : ""
+  readonly property string repoUrl: pluginManifest && pluginManifest.repository
+    ? String(pluginManifest.repository) : "https://github.com/nixfred/beatdeck.omarchy"
+  readonly property string homeUrl: pluginManifest && pluginManifest.homepage
+    ? String(pluginManifest.homepage) : "https://nixfred.com"
   property real intro: 0
   property real trackPosition: 0
   property real beatPulse: 0
@@ -1075,6 +1088,51 @@ BarWidget {
         font.family: root.bar ? root.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.caption
         opacity: root.artReveal
+      }
+
+      // About: version, source, site. Mirrors the player identity on the
+      // opposite corner so the foot of the deck reads source on one side and
+      // provenance on the other.
+      Row {
+        anchors.right: parent.right
+        anchors.rightMargin: Style.space(14)
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.space(10)
+        spacing: Style.space(6)
+        opacity: root.artReveal
+
+        component About: Text {
+          id: aboutText
+          property string url: ""
+          textFormat: Text.PlainText
+          color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b,
+            url !== "" && aboutArea.containsMouse ? 0.95 : 0.4)
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.caption
+          font.underline: url !== "" && aboutArea.containsMouse
+          MouseArea {
+            id: aboutArea
+            anchors.fill: parent
+            enabled: aboutText.url !== ""
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Quickshell.execDetached(["xdg-open", aboutText.url])
+          }
+        }
+
+        About { text: "Beatdeck" + (root.pluginVersion !== "" ? "  v" + root.pluginVersion : "") }
+        About { text: "·"; visible: root.repoUrl !== "" }
+        About {
+          visible: root.repoUrl !== ""
+          text: root.repoUrl.replace(/^https?:\/\//, "")
+          url: root.repoUrl
+        }
+        About { text: "·"; visible: root.homeUrl !== "" }
+        About {
+          visible: root.homeUrl !== ""
+          text: root.homeUrl.replace(/^https?:\/\//, "")
+          url: root.homeUrl
+        }
       }
     }
   }

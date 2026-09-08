@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "nixfred.beatdeck",
   "name": "Beatdeck",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Fred Nix",
   "license": "MIT",
-  "description": "Beatbar's live spectrum as the trigger for the Living Media Cockpit \u2014 click for now playing, right click for the visuals",
+  "description": "Beatbar's live spectrum as the trigger for the Living Media Cockpit — click for now playing, right click for the visuals",
   "kinds": [
     "service",
     "bar-widget"
@@ -134,5 +134,7 @@
         "description": "Clear space kept between Beatdeck and the centre section."
       }
     ]
-  }
+  },
+  "repository": "https://github.com/nixfred/beatdeck.omarchy",
+  "homepage": "https://nixfred.com"
 }
