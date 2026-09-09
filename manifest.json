@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "nixfred.beatdeck",
   "name": "Beatdeck",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "author": "Fred Nix",
   "license": "MIT",
   "description": "Beatbar's live spectrum as the trigger for the Living Media Cockpit — click for now playing, right click for the visuals",
@@ -38,7 +38,8 @@
       "minWidth": 96,
       "maxWidth": 1600,
       "stretchGap": 14,
-      "themeColors": true
+      "themeColors": true,
+      "remoteArt": true
     },
     "schema": [
       {
@@ -90,6 +91,13 @@
         "type": "boolean",
         "label": "Follow theme colours",
         "description": "Snap the album-art tint to the nearest hue in the active Omarchy theme, keeping the artwork's own saturation. Off uses the sampled cover colour raw.",
+        "defaultValue": true
+      },
+      {
+        "key": "remoteArt",
+        "type": "boolean",
+        "label": "Fetch remote album art",
+        "description": "Sample cover art that a player publishes as an http or https URL, which means one request to that host per track. Off still tints from art embedded in the file or stored on disk.",
         "defaultValue": true
       },
       {

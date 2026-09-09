@@ -112,6 +112,10 @@ BarWidget {
   // the theme, so read colors.toml for the named hues. Used to keep the album
   // tint inside the theme's own range: see AlbumPalette.snapHue.
   readonly property bool themeColors: setting("themeColors", true) !== false
+  // Album art hosted remotely (browsers, streaming players) means a request to
+  // that host every time the track changes. On by default because the tint is
+  // the point, but it is a network call and deserves a switch.
+  readonly property bool remoteArt: setting("remoteArt", true) !== false
   readonly property string themePalettePath:
     (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state")
       + "/omarchy/current/theme/colors.toml"
@@ -167,6 +171,7 @@ BarWidget {
     sourceUrl: root.artUrl
     fallback: Color.accent
     themeHues: root.themeColors ? root.themeHues : []
+    remoteArt: root.remoteArt
   }
 
   NumberAnimation {

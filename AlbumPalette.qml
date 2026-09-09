@@ -12,6 +12,19 @@ Item {
   // theme shipped no colors.toml, or the user turned theme colours off; either
   // way the artwork colour is then used raw, exactly as it was before.
   property var themeHues: []
+  // Remote art is a request to a third party on every track change, so it is
+  // gated by a setting and memoised: one fetch per URL per session.
+  property bool remoteArt: true
+  property var remoteCache: ({})
+
+  // Fetched, not opened: curl is pinned to http and https on both the initial
+  // request and any redirect, so a redirect cannot walk the fetch onto file://
+  // or gopher://. Bounded in time and size so a hostile or broken host cannot
+  // stall the deck or pull down something enormous.
+  readonly property string remoteScript:
+    "curl -fsSL --proto =http,https --proto-redir =http,https" +
+    " --max-time 6 --max-filesize 8000000 -- \"$1\"" +
+    " | magick - -resize 1x1! -colorspace sRGB -format '%[hex:p{0,0}]' info:"
   readonly property color accent: mixColor(fallback, snapHue(sampled), 0.72)
 
   // A lime album cover used to make the whole deck lime whatever the theme
@@ -70,6 +83,7 @@ Item {
   function refresh() {
     sampled = fallback
     sampler.payload = ""
+    sampler.remoteUrl = ""
     var url = String(sourceUrl || "")
 
     if (url.indexOf("data:") === 0) {
@@ -84,6 +98,16 @@ Item {
       // the same frame the [0] below selects.
       sampler.command = ["sh", "-c",
         "base64 -d | magick - -resize 1x1! -colorspace sRGB -format '%[hex:p{0,0}]' info:"]
+      sampler.running = true
+      return
+    }
+
+    if (url.indexOf("http://") === 0 || url.indexOf("https://") === 0) {
+      if (!remoteArt) return
+      var hit = remoteCache[url]
+      if (hit) { sampled = hit; return }
+      sampler.remoteUrl = url
+      sampler.command = ["sh", "-c", remoteScript, "sh", url]
       sampler.running = true
       return
     }
@@ -109,6 +133,8 @@ Item {
     property string result: ""
     // Set when the art arrived inline and has to be fed in rather than opened.
     property string payload: ""
+    // Set when this run fetched a remote URL, so the result can be memoised.
+    property string remoteUrl: ""
 
     stdinEnabled: sampler.payload !== ""
     onStarted: {
@@ -127,7 +153,15 @@ Item {
     onExited: function(exitCode) {
       if (exitCode !== 0) return
       var match = sampler.result.match(/^([0-9a-fA-F]{6})/)
-      if (match) root.sampled = "#" + match[1]
+      if (!match) return
+      root.sampled = "#" + match[1]
+      if (sampler.remoteUrl !== "") {
+        // Bounded so a long shuffle cannot grow it without limit. Dropping the
+        // whole map is fine: the cost of a miss is one fetch.
+        if (Object.keys(root.remoteCache).length >= 24) root.remoteCache = ({})
+        root.remoteCache[sampler.remoteUrl] = root.sampled
+        sampler.remoteUrl = ""
+      }
     }
   }
 }
