@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Io
 import qs.Ui
 import qs.Commons
 
@@ -106,10 +107,66 @@ BarWidget {
     : (stretch ? stretchedWidth : Style.spaceReal(configuredWidth))
   implicitHeight: vertical ? Style.spaceReal(configuredWidth) : barSize
 
+  // ── theme palette ─────────────────────────────────────────────────────────
+  // The shell's Color singleton keeps only five roles and discards the rest of
+  // the theme, so read colors.toml for the named hues. Used to keep the album
+  // tint inside the theme's own range: see AlbumPalette.snapHue.
+  readonly property bool themeColors: setting("themeColors", true) !== false
+  readonly property string themePalettePath:
+    (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state")
+      + "/omarchy/current/theme/colors.toml"
+  property var themePalette: ({})
+
+  function parsePalette(raw) {
+    var out = {}
+    var lines = String(raw || "").split("\n")
+    for (var i = 0; i < lines.length; i++) {
+      var m = lines[i].match(/^\s*([A-Za-z0-9_]+)\s*=\s*["']?(#[0-9A-Fa-f]{6})/)
+      if (m) out[m[1]] = m[2]
+    }
+    return out
+  }
+
+  // 0..1, or -1 for a grey with no hue to borrow.
+  function hexHue(hex) {
+    var r = parseInt(hex.substr(1, 2), 16) / 255
+    var g = parseInt(hex.substr(3, 2), 16) / 255
+    var b = parseInt(hex.substr(5, 2), 16) / 255
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn
+    if (d === 0) return -1
+    var h
+    if (mx === r) h = ((g - b) / d) % 6
+    else if (mx === g) h = (b - r) / d + 2
+    else h = (r - g) / d + 4
+    h /= 6
+    return h < 0 ? h + 1 : h
+  }
+
+  // Every distinct hue this theme actually contains, for the album tint to
+  // snap onto. Greys contribute nothing and are dropped.
+  readonly property var themeHues: {
+    var out = []
+    for (var k in themePalette) {
+      var h = hexHue(themePalette[k])
+      if (h >= 0 && out.indexOf(h) === -1) out.push(h)
+    }
+    return out
+  }
+
+  FileView {
+    path: root.themePalettePath
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.themePalette = root.parsePalette(text())
+    onLoadFailed: root.themePalette = ({})
+  }
+
   AlbumPalette {
     id: palette
     sourceUrl: root.artUrl
     fallback: Color.accent
+    themeHues: root.themeColors ? root.themeHues : []
   }
 
   NumberAnimation {
