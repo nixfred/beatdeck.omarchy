@@ -63,9 +63,32 @@ Item {
     }
   }
 
+  // Everything MPRIS hands us that we can actually sample. A player may give a
+  // path, or it may inline the bytes; mpv and anything else with the cover
+  // embedded in the file send a data: URI, and treating those as "no art" left
+  // the deck untinted for them entirely.
   function refresh() {
     sampled = fallback
-    var path = localPath(sourceUrl)
+    sampler.payload = ""
+    var url = String(sourceUrl || "")
+
+    if (url.indexOf("data:") === 0) {
+      var comma = url.indexOf(",")
+      // Only base64 payloads. A percent-encoded data: URI is legal but no
+      // player emits one for cover art, and guessing at it would be worse
+      // than leaving the tint alone.
+      if (comma < 0 || url.lastIndexOf(";base64", comma) < 0) return
+      sampler.payload = url.slice(comma + 1)
+      // Over stdin, never argv: a cover can be megabytes of base64 and would
+      // blow ARG_MAX. `magick -` reads the first frame from the pipe, which is
+      // the same frame the [0] below selects.
+      sampler.command = ["sh", "-c",
+        "base64 -d | magick - -resize 1x1! -colorspace sRGB -format '%[hex:p{0,0}]' info:"]
+      sampler.running = true
+      return
+    }
+
+    var path = localPath(url)
     if (!path) return
     sampler.command = [
       "magick", path + "[0]",
@@ -84,6 +107,17 @@ Item {
   Process {
     id: sampler
     property string result: ""
+    // Set when the art arrived inline and has to be fed in rather than opened.
+    property string payload: ""
+
+    stdinEnabled: sampler.payload !== ""
+    onStarted: {
+      if (payload === "") return
+      write(payload)
+      // Closing the write channel is what gives `base64 -d` its EOF. Without
+      // it the pipeline waits for more input and the sample never lands.
+      stdinEnabled = false
+    }
 
     stdout: StdioCollector {
       waitForEnd: true

@@ -24,6 +24,23 @@ function extract(src, name) {
 }
 for (const n of ['parsePalette', 'hexHue']) vm.runInContext(extract(widget, n), ctx);
 vm.runInContext(extract(album, 'nearestHue'), ctx);
+vm.runInContext(extract(album, 'localPath'), ctx);
+
+// Replays refresh()'s dispatch against a stub sampler, so the real function
+// stays the single source of truth for the branch order.
+function decide(url) {
+  const sampler = { payload: '', command: null, running: false };
+  const scope = Object.assign(Object.create(null), {
+    sampler, sampled: null, fallback: null,
+    localPath: ctx.localPath, String, decodeURIComponent,
+  });
+  const body = extract(album, 'refresh')
+    .replace(/^function refresh\(\)\s*\{/, '').replace(/\}$/, '')
+    .replace(/sourceUrl/g, 'URL');
+  vm.runInNewContext('(function(URL){' + body + '})(u)',
+    Object.assign(scope, { u: url }));
+  return sampler;
+}
 
 test('parses quoted and bare hex, ignores everything else', () => {
   const p = ctx.parsePalette(['mode = "dark"', 'accent = "#7d82d9"', 'orange = #eb8b54',
@@ -67,4 +84,32 @@ test('no theme hues means nothing to snap to', () => {
 test('the album tint guards near-greys rather than inventing a hue', () => {
   assert.ok(/hslSaturation\s*<\s*0\.08/.test(album),
     'snapHue must leave a near-grey sample alone');
+});
+
+// ── album art source dispatch ───────────────────────────────────────────────
+// refresh() decides how to sample from the shape of the MPRIS art URL. These
+// check the decision, not the sampling: what command it builds and whether the
+// payload is fed over stdin.
+test('a file:// url is opened directly, with no stdin payload', () => {
+  const r = decide('file:///home/pi/art.png');
+  assert.equal(r.payload, '');
+  assert.equal(r.command[0], 'magick');
+  assert.ok(r.command[1].endsWith('[0]'), 'should select the first frame');
+});
+
+test('a base64 data: url is decoded over stdin, never argv', () => {
+  const r = decide('data:image/jpeg;base64,AAAA');
+  assert.equal(r.payload, 'AAAA');
+  assert.equal(r.command[0], 'sh');
+  assert.ok(/base64 -d \| magick -/.test(r.command[2]));
+  assert.ok(!r.command.join(' ').includes('AAAA'), 'payload must not reach argv');
+});
+
+test('urls we cannot sample leave the tint alone', () => {
+  for (const url of ['', null, 'https://example.com/art.jpg',
+                     'data:image/png,notbase64', 'data:malformed']) {
+    const r = decide(url);
+    assert.equal(r.command, null, 'should not run for ' + url);
+    assert.equal(r.payload, '');
+  }
 });
