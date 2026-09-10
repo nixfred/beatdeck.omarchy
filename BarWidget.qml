@@ -101,20 +101,26 @@ BarWidget {
   onActivePlayerChanged: refreshPosition()
   onTitleChanged: refreshPosition()
 
-  // Nothing playing means nothing worth a slot. Leave the row entirely so a
-  // neighbour that stretches (Burn Bar) measures a hole with no partner in it
-  // and takes all of it, then come back the instant a player reports a track.
-  // Off keeps the older behaviour: shrink to the minimum width and draw the
-  // idle line so the deck stays clickable.
+  // The full-width spectrum is only worth its space while audio is actually
+  // playing. Any other time — paused with a track, or nothing loaded at all —
+  // the deck collapses to a small play button ("handle") and hands the freed
+  // gap to a neighbour that stretches (Burn Bar), while staying visible and
+  // clickable so the deck can always be reopened. It never disappears: a lone
+  // play glyph marks where Now Playing lives. Off keeps the old always-stretch
+  // behaviour and its idle line.
   readonly property bool hideWhenIdle: setting("hideWhenIdle", true) === true
-  readonly property bool parked: hideWhenIdle && !hasMedia
-  onParkedChanged: if (!parked) settleTimer.restart()
+  readonly property bool handle: hideWhenIdle && !playing
+  // Compact button width, in the same space-units as minWidth/maxWidth so the
+  // stretch clamp and Burn Bar's partner cap agree to the pixel.
+  readonly property int handleWidth: 34
+  onHandleChanged: measureStretch()
 
-  visible: !parked
-  implicitWidth: parked ? 0 : (vertical
+  visible: true
+  implicitWidth: vertical
     ? barSize
-    : (stretch ? stretchedWidth : Style.spaceReal(configuredWidth)))
-  implicitHeight: parked ? 0 : (vertical ? Style.spaceReal(configuredWidth) : barSize)
+    : (handle ? Style.spaceReal(handleWidth)
+      : (stretch ? stretchedWidth : Style.spaceReal(configuredWidth)))
+  implicitHeight: vertical ? Style.spaceReal(configuredWidth) : barSize
 
   // ── theme palette ─────────────────────────────────────────────────────────
   // The shell's Color singleton keeps only five roles and discards the rest of
@@ -256,12 +262,13 @@ BarWidget {
   readonly property bool stretch: setting("stretch", true) === true
   readonly property int stretchMinWidth: Math.max(24, Math.min(600,
     Number(setting("minWidth", 96)) || 96))
-  // Nothing playing means nothing to draw, and holding half an ultrawide bar
-  // blank serves no one. Collapse to the minimum so a neighbour that does have
-  // something to show (Burn Bar) can take the gap; claim it back the instant a
-  // track starts. Neighbours read this cap to size themselves, so it has to be
-  // the honest number rather than the configured ceiling.
-  readonly property int stretchMaxWidth: !hasMedia ? stretchMinWidth
+  // While collapsed to the play handle, both floor and ceiling drop to the
+  // button width: measureStretch pins us there and Burn Bar reads the same low
+  // cap, so the two agree and no blank strip is left between them. Playing, the
+  // ceiling returns to the configured maximum. Neighbours read this cap to size
+  // themselves, so it has to be the honest number rather than the ceiling.
+  readonly property int effectiveMinWidth: handle ? handleWidth : stretchMinWidth
+  readonly property int stretchMaxWidth: handle ? handleWidth
     : Math.max(stretchMinWidth, Math.min(4000,
       Number(setting("maxWidth", 1600)) || 1600))
   onHasMediaChanged: measureStretch()
@@ -274,7 +281,7 @@ BarWidget {
   function measureStretch() {
     if (!stretch || vertical || !bar || !Array.isArray(bar.moduleSlots)) return
 
-    var minimum = Style.spaceReal(stretchMinWidth)
+    var minimum = Style.spaceReal(effectiveMinWidth)
     var maximum = Style.spaceReal(stretchMaxWidth)
     var origin
 
@@ -705,8 +712,21 @@ BarWidget {
     easing.type: Easing.OutQuad
   }
 
+  // Collapsed state: a single play glyph marks where Now Playing lives and
+  // stays clickable (left opens the cockpit, middle toggles play/pause).
+  Text {
+    anchors.centerIn: parent
+    visible: root.handle
+    text: "󰐊"
+    textFormat: Text.PlainText
+    color: root.spectrumAccent
+    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+    font.pixelSize: Style.font.icon
+  }
+
   Canvas {
     id: visualization
+    visible: !root.handle
     anchors.fill: parent
     antialiasing: true
 
