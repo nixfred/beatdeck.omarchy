@@ -101,11 +101,20 @@ BarWidget {
   onActivePlayerChanged: refreshPosition()
   onTitleChanged: refreshPosition()
 
-  visible: true
-  implicitWidth: vertical
+  // Nothing playing means nothing worth a slot. Leave the row entirely so a
+  // neighbour that stretches (Burn Bar) measures a hole with no partner in it
+  // and takes all of it, then come back the instant a player reports a track.
+  // Off keeps the older behaviour: shrink to the minimum width and draw the
+  // idle line so the deck stays clickable.
+  readonly property bool hideWhenIdle: setting("hideWhenIdle", true) === true
+  readonly property bool parked: hideWhenIdle && !hasMedia
+  onParkedChanged: if (!parked) settleTimer.restart()
+
+  visible: !parked
+  implicitWidth: parked ? 0 : (vertical
     ? barSize
-    : (stretch ? stretchedWidth : Style.spaceReal(configuredWidth))
-  implicitHeight: vertical ? Style.spaceReal(configuredWidth) : barSize
+    : (stretch ? stretchedWidth : Style.spaceReal(configuredWidth)))
+  implicitHeight: parked ? 0 : (vertical ? Style.spaceReal(configuredWidth) : barSize)
 
   // ── theme palette ─────────────────────────────────────────────────────────
   // The shell's Color singleton keeps only five roles and discards the rest of
@@ -356,7 +365,7 @@ BarWidget {
   // next to the canvas repaint that already runs at cava's frame rate.
   Timer {
     interval: 500
-    running: root.stretch && !root.vertical
+    running: root.stretch && !root.vertical && !root.parked
     repeat: true
     onTriggered: root.measureStretch()
   }

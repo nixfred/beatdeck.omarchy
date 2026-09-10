@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "nixfred.beatdeck",
   "name": "Beatdeck",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "Fred Nix",
   "license": "MIT",
   "description": "Beatbar's live spectrum as the trigger for the Living Media Cockpit — click for now playing, right click for the visuals",
@@ -34,6 +34,7 @@
       "bassMotion": "Subtle",
       "auroraPulse": true,
       "showIdleLine": true,
+      "hideWhenIdle": true,
       "stretch": true,
       "minWidth": 96,
       "maxWidth": 1600,
@@ -112,6 +113,13 @@
         "type": "boolean",
         "label": "Show line when silent",
         "defaultValue": true
+      },
+      {
+        "key": "hideWhenIdle",
+        "type": "boolean",
+        "label": "Hide when nothing is playing",
+        "defaultValue": true,
+        "description": "Leave the bar entirely, handing the space to the neighbour, until a player reports a track. Off shrinks to the minimum width and keeps the idle line."
       },
       {
         "key": "stretch",
