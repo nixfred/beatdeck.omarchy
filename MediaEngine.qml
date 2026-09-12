@@ -1,12 +1,21 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 
+// The spectrum and the now-playing state, in one object the bar widget owns.
+//
 // CAVA analyzer adapted from ryrobes.beatbar (MIT, Ryan Robitaille).
 // Beatdeck used to call serviceFor("ryrobes.beatbar"), which is silent unless
-// that plugin is enabled. Owning the analyzer here means the bar widget that
-// is actually on the bar is enough to drive the spectrum.
+// that plugin is enabled, and then serviceFor("pi.media") for the track. Both
+// lookups go through the shell's scoped plugin API, which hands a widget only
+// its own plugin's service — and hands a widget hosted by a third-party bar
+// nothing at all, because the widget's `bar.shell` is the *bar's* scoped API.
+// So on any bar other than the stock one, Beatdeck saw neither a spectrum nor
+// a player and sat on its idle play button while music was audibly playing.
+// Nothing here asks the shell for anything: the widget on the bar is the
+// whole plugin.
 Item {
   id: root
 
@@ -84,6 +93,97 @@ Item {
   property string lastError: ""
 
   signal beat(real strength)
+
+  // ── Now playing ───────────────────────────────────────────────────────────
+  // Beatdeck used to read the track from serviceFor("pi.media"). The shell
+  // sandboxes a third-party plugin to its OWN service — serviceFor() of any
+  // other plugin id returns null for anything that is not the bar itself — so
+  // that lookup silently produced no player and the widget sat collapsed on
+  // its idle play button while music was audibly playing. Owning an MPRIS
+  // read here is the same fix already applied to the cava analyzer above: the
+  // widget on the bar is enough to drive everything it shows.
+  readonly property var players: Mpris.players ? Mpris.players.values : []
+  property int playerRevision: 0
+  readonly property var activePlayer: {
+    playerRevision // re-select when any player's state changes, not just the list
+    return selectActivePlayer()
+  }
+
+  function hasTrackMetadata(player) {
+    return !!(player && (player.trackTitle || player.trackArtist))
+  }
+
+  function isProxyPlayer(player) {
+    var dbus = String(player && player.dbusName || "").toLowerCase()
+    var entry = String(player && player.desktopEntry || "").toLowerCase()
+    return dbus.indexOf("playerctld") !== -1 || entry === "playerctld"
+  }
+
+  // Prefer something actually playing with a track on it, then anything
+  // playing, then anything with a track. A playerctld proxy is only ever a
+  // last resort, because it mirrors a real player that is usually also listed.
+  function selectActivePlayer() {
+    var playingTrack = null, playing = null, track = null, any = null
+    var proxyFallback = null
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i]
+      if (!p) continue
+      if (isProxyPlayer(p)) { if (!proxyFallback) proxyFallback = p; continue }
+      if (p.isPlaying && hasTrackMetadata(p)) { if (!playingTrack) playingTrack = p }
+      else if (p.isPlaying) { if (!playing) playing = p }
+      else if (hasTrackMetadata(p)) { if (!track) track = p }
+      else if (!any) any = p
+    }
+    return playingTrack || playing || track || any || proxyFallback || null
+  }
+
+  function playerKey(player) {
+    return String(player && (player.dbusName || player.identity || "") || "")
+  }
+
+  // The subset of pi.media's runAction that the cockpit actually calls. The
+  // extra arguments keep the call shape identical, so BarWidget can talk to
+  // either service without branching.
+  function runAction(action, showFeedback, targetKey) {
+    var player = activePlayer
+    if (targetKey) {
+      for (var i = 0; i < players.length; i++)
+        if (playerKey(players[i]) === targetKey) { player = players[i]; break }
+    }
+    if (!player) return
+
+    if (action === "next") {
+      if (player.canGoNext) player.next()
+    } else if (action === "previous") {
+      if (player.canGoPrevious) player.previous()
+    } else if (action === "play") {
+      if (player.canPlay) player.play()
+      else if (player.canTogglePlaying && !player.isPlaying) player.togglePlaying()
+    } else if (action === "pause") {
+      if (player.canPause) player.pause()
+      else if (player.canTogglePlaying && player.isPlaying) player.togglePlaying()
+    } else {
+      if (player.canTogglePlaying) player.togglePlaying()
+      else if (player.isPlaying && player.canPause) player.pause()
+      else if (!player.isPlaying && player.canPlay) player.play()
+    }
+  }
+
+  // A binding on `players` alone never re-fires when a player merely starts or
+  // stops playing, or swaps track. Watch each live player and bump a revision
+  // the activePlayer binding depends on.
+  Instantiator {
+    model: root.players
+    delegate: QtObject {
+      required property var modelData
+      readonly property Connections watcher: Connections {
+        target: modelData
+        function onPlaybackStateChanged() { root.playerRevision++ }
+        function onTrackTitleChanged() { root.playerRevision++ }
+        function onTrackArtistChanged() { root.playerRevision++ }
+      }
+    }
+  }
 
   function zeroBands() {
     var values = []
@@ -262,27 +362,5 @@ Item {
     interval: 650
     repeat: false
     onTriggered: root.clearSpectrum()
-  }
-
-  IpcHandler {
-    target: "nixfred.beatdeck"
-
-    function status(): string {
-      return JSON.stringify({
-        available: root.available,
-        active: root.active,
-        level: root.level,
-        bass: root.bass,
-        beatCount: root.beatCount,
-        lastBeatAt: root.lastBeatAt,
-        bands: root.bands,
-        error: root.lastError,
-        source: root.sinkMonitorSource
-      })
-    }
-
-    function restart(): void {
-      root.restartAnalyzer()
-    }
   }
 }

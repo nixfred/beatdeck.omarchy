@@ -17,15 +17,19 @@ ok "omarchy plugin validate"
 jq -e '
   .id == "nixfred.beatdeck" and
   .entryPoints.barWidget == "BarWidget.qml" and
-  .entryPoints.service == "Service.qml" and
+  (.kinds == ["bar-widget"]) and
+  (.entryPoints | has("service") | not) and
   (.barWidget.schema | map(.key) | index("themeColors")) != null
 ' manifest.json >/dev/null || fail "manifest contract"
 ok "manifest contract"
 
 # Every entry point the manifest names must actually be on disk. A manifest
-# that promises a Service.qml the package does not ship fails at load, which
-# is how the stale install shipped a service the plugin dir did not have.
-for key in barWidget service; do
+# that promises a file the package does not ship fails at load, which is how a
+# stale install once named a service the plugin dir did not have. The widget is
+# the only entry point now: the shell hands a widget under a third-party bar no
+# service at all, so the analyzer and the MPRIS read live in MediaEngine.qml
+# and the widget owns them.
+for key in barWidget; do
   f=$(jq -r ".entryPoints.$key" manifest.json)
   [ -f "$f" ] || fail "manifest names $key entry point '$f' but it is missing"
 done

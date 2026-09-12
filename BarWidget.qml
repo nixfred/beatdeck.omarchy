@@ -9,12 +9,12 @@ BarWidget {
   id: root
   moduleName: "nixfred.beatdeck"
 
-  readonly property var mediaService: bar && bar.shell
-    ? bar.shell.serviceFor("pi.media") : null
-  readonly property var spectrum: {
-    if (!bar || !bar.shell) return null
-    return bar.shell.serviceFor(moduleName) || bar.shell.serviceFor("ryrobes.beatbar")
-  }
+  // Both the spectrum and the track come from an engine this widget owns. See
+  // the header of MediaEngine.qml: every serviceFor() route into another
+  // plugin — and, under a third-party bar, into this plugin's own service —
+  // returns null, so asking the shell for either one was silently dead.
+  readonly property var spectrum: engine
+  readonly property var mediaService: engine
   readonly property var activePlayer: mediaService ? mediaService.activePlayer : null
 
   readonly property bool hasMedia: activePlayer !== null
@@ -1225,6 +1225,44 @@ BarWidget {
           url: root.homeUrl
         }
       }
+    }
+  }
+
+  // The engine is the plugin: cava plus MPRIS, owned by the widget so that no
+  // part of Beatdeck depends on a shell service lookup that the plugin sandbox
+  // refuses. `shell` is handed over only so the engine can raise the OSD
+  // notice when cava is missing.
+  MediaEngine {
+    id: engine
+    shell: root.bar ? root.bar.shell : null
+  }
+
+  IpcHandler {
+    target: "nixfred.beatdeck"
+
+    function status(): string {
+      return JSON.stringify({
+        available: engine.available,
+        active: engine.active,
+        level: engine.level,
+        bass: engine.bass,
+        beatCount: engine.beatCount,
+        lastBeatAt: engine.lastBeatAt,
+        bands: engine.bands,
+        error: engine.lastError,
+        source: engine.sinkMonitorSource,
+        playerCount: engine.players.length,
+        player: engine.activePlayer ? {
+          identity: engine.activePlayer.identity || "",
+          title: engine.activePlayer.trackTitle || "",
+          artist: engine.activePlayer.trackArtist || "",
+          playing: engine.activePlayer.isPlaying
+        } : null
+      })
+    }
+
+    function restart(): void {
+      engine.restartAnalyzer()
     }
   }
 }
