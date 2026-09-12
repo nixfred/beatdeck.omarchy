@@ -17,9 +17,57 @@ Item {
   visible: false
 
   readonly property int bandCount: 24
-  readonly property string configPath: decodeURIComponent(
-    String(Qt.resolvedUrl("cava.conf")).replace(/^file:\/\//, ""))
   readonly property var defaultSink: Pipewire.defaultAudioSink
+
+  // cava's pipewire backend resolves `source = auto` to the default *capture*
+  // device (a microphone), not the default sink's monitor. On a host with no
+  // mic — or one whose audio leaves over the network to a Sonos — that means
+  // cava reads pure silence and the spectrum sits flat while music plays. So
+  // we point cava at the monitor of whatever sink is currently the default,
+  // and rebuild it whenever that sink changes (see onDefaultSinkChanged).
+  // The monitor node name is the sink node name with ".monitor" appended,
+  // which is what pactl/pw report for every sink including the DLNA ones.
+  readonly property string sinkMonitorSource: (defaultSink && defaultSink.name)
+    ? defaultSink.name + ".monitor" : "auto"
+
+  // cava needs a config file (-p); it has no CLI override for the source, so
+  // we render a runtime copy with the resolved source into the runtime dir
+  // and hand cava that. The shipped cava.conf is the template of record.
+  readonly property string runtimeConfigPath:
+    (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/nixfred-beatdeck-cava.conf"
+
+  // Kept in sync with cava.conf; __SOURCE__ is swapped for sinkMonitorSource.
+  // Embedded rather than read from disk so the first render never races an
+  // async file load before cava starts.
+  readonly property string cavaConfigTemplate:
+    "[general]\n"
+    + "framerate = 15\n"
+    + "bars = 24\n"
+    + "autosens = 1\n"
+    + "sensitivity = 100\n"
+    + "lower_cutoff_freq = 45\n"
+    + "higher_cutoff_freq = 16000\n"
+    + "sleep_timer = 2\n"
+    + "\n"
+    + "[input]\n"
+    + "method = pipewire\n"
+    + "source = __SOURCE__\n"
+    + "sample_rate = 48000\n"
+    + "active = 1\n"
+    + "remix = 1\n"
+    + "virtual = 1\n"
+    + "\n"
+    + "[output]\n"
+    + "method = raw\n"
+    + "channels = stereo\n"
+    + "raw_target = /dev/stdout\n"
+    + "data_format = ascii\n"
+    + "ascii_max_range = 1000\n"
+    + "bar_delimiter = 59\n"
+    + "frame_delimiter = 10\n"
+    + "\n"
+    + "[smoothing]\n"
+    + "noise_reduction = 65\n"
 
   property var bands: zeroBands()
   property real level: 0
@@ -53,6 +101,14 @@ Item {
   function normalized(value) {
     var raw = Math.max(0, Math.min(1000, Number(value) || 0)) / 1000
     return Math.pow(raw, 0.72)
+  }
+
+  // Render the runtime cava config for the current default sink. Returns the
+  // effective source so callers can log what cava will actually listen to.
+  function writeRuntimeConfig() {
+    var body = cavaConfigTemplate.replace("__SOURCE__", sinkMonitorSource)
+    runtimeConfFile.setText(body)
+    return sinkMonitorSource
   }
 
   function consumeFrame(line) {
@@ -96,6 +152,9 @@ Item {
 
   function restartAnalyzer() {
     if (!componentReady) return
+    // The config is (re)rendered at the moment cava starts (restartTimer),
+    // using the sink in force *then* — not now — so a transient default-sink
+    // blip during the stop/start gap cannot leave a stale source in the file.
     if (analyzer.running) {
       expectedStop = true
       analyzer.running = false
@@ -125,12 +184,22 @@ Item {
     }))
   }
 
+  // The default sink moving (local speakers → Sonos, or between speakers)
+  // changes which monitor carries the audio. Re-render and restart cava.
   onDefaultSinkChanged: restartAnalyzer()
   onShellChanged: if (cavaNoticePending) showCavaUnavailableNotice()
 
   Component.onCompleted: {
     componentReady = true
-    analyzer.running = true
+    // The runtime config is rendered by restartTimer right before cava starts.
+    restartTimer.restart()
+  }
+
+  FileView {
+    id: runtimeConfFile
+    path: root.runtimeConfigPath
+    atomicWrites: true
+    printErrors: false
   }
 
   Process {
@@ -141,7 +210,7 @@ Item {
       "TERM",
       "cava",
       "-p",
-      root.configPath
+      root.runtimeConfigPath
     ]
 
     stdout: SplitParser {
@@ -178,7 +247,14 @@ Item {
     id: restartTimer
     interval: 1800
     repeat: false
-    onTriggered: if (root.componentReady && !analyzer.running) analyzer.running = true
+    onTriggered: {
+      if (!root.componentReady || analyzer.running) return
+      // Render for the sink that is current at start time, then launch cava
+      // on it. FileView.atomicWrites means the file is complete before the
+      // process starts on the same event-loop pass.
+      root.writeRuntimeConfig()
+      analyzer.running = true
+    }
   }
 
   Timer {
@@ -200,7 +276,8 @@ Item {
         beatCount: root.beatCount,
         lastBeatAt: root.lastBeatAt,
         bands: root.bands,
-        error: root.lastError
+        error: root.lastError,
+        source: root.sinkMonitorSource
       })
     }
 
