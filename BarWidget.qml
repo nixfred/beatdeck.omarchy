@@ -118,8 +118,7 @@ BarWidget {
   visible: true
   implicitWidth: vertical
     ? barSize
-    : (handle ? Style.spaceReal(handleWidth)
-      : (stretch ? stretchedWidth : Style.spaceReal(configuredWidth)))
+    : (handle ? Style.spaceReal(handleWidth) : stretchedWidth)
   implicitHeight: vertical ? Style.spaceReal(configuredWidth) : barSize
 
   // ── theme palette ─────────────────────────────────────────────────────────
@@ -268,9 +267,13 @@ BarWidget {
   // ceiling returns to the configured maximum. Neighbours read this cap to size
   // themselves, so it has to be the honest number rather than the ceiling.
   readonly property int effectiveMinWidth: handle ? handleWidth : stretchMinWidth
+  // Ceiling. Stretching, that is the configured maximum. Not stretching, it is
+  // the configured width: the deck sits at the size Fred picked while there is
+  // room for it, and the measurement below only ever takes width away.
   readonly property int stretchMaxWidth: handle ? handleWidth
-    : Math.max(stretchMinWidth, Math.min(4000,
-      Number(setting("maxWidth", 1600)) || 1600))
+    : (stretch ? Math.max(stretchMinWidth, Math.min(4000,
+        Number(setting("maxWidth", 1600)) || 1600))
+      : Math.max(stretchMinWidth, configuredWidth))
   onHasMediaChanged: measureStretch()
   readonly property int stretchGap: Math.max(0, Math.min(200,
     Number(setting("stretchGap", 14)) || 0))
@@ -278,8 +281,13 @@ BarWidget {
   // Seeded with the fixed width so the first frame is never zero-wide.
   property real stretchedWidth: Style.spaceReal(configuredWidth)
 
+  // Runs whether or not Stretch is on. With it on, the deck grows into the free
+  // room. With it off it cannot grow past the configured width, but it still
+  // gives ground: a fixed-width widget that refuses to shrink pushes a crowded
+  // row into overflow, and then the whole strip scrolls and magnifies under the
+  // pointer, which is how a click meant for Beatdeck landed on a neighbour.
   function measureStretch() {
-    if (!stretch || vertical || !bar || !Array.isArray(bar.moduleSlots)) return
+    if (vertical || !bar || !Array.isArray(bar.moduleSlots)) return
 
     var minimum = Style.spaceReal(effectiveMinWidth)
     var maximum = Style.spaceReal(stretchMaxWidth)
@@ -786,7 +794,7 @@ BarWidget {
       wheel.accepted = true
     }
 
-    onEntered: if (root.bar) root.bar.showTooltip(root,
+    onEntered: if (root.bar && root.bar.showTooltip) root.bar.showTooltip(root,
       (root.hasMedia
         ? root.title + (root.artist ? " — " + root.artist : "")
         : "Nothing playing")
@@ -1263,6 +1271,20 @@ BarWidget {
 
     function restart(): void {
       engine.restartAnalyzer()
+    }
+
+    function open(): void {
+      root.popupOpen = true
+    }
+
+    function geometry(): string {
+      var p = root.mapToItem(null, 0, 0)
+      return JSON.stringify({
+        x: p.x, y: p.y, w: root.width, h: root.height,
+        implicitWidth: root.implicitWidth,
+        handle: root.handle, stretch: root.stretch,
+        playing: root.playing
+      })
     }
   }
 }
