@@ -109,7 +109,13 @@ BarWidget {
   // play glyph marks where Now Playing lives. Off keeps the old always-stretch
   // behaviour and its idle line.
   readonly property bool hideWhenIdle: setting("hideWhenIdle", true) === true
-  readonly property bool handle: hideWhenIdle && !playing
+  // Set by measureStretch when the row cannot pay even the minimum width. A
+  // spectrum squeezed below its floor is unreadable anyway, so the deck gives
+  // the whole strip back and keeps only its play handle. It reopens on its own
+  // as soon as the room returns.
+  property bool squeezed: false
+  property var lastMeasure: ({})
+  readonly property bool handle: (hideWhenIdle && !playing) || squeezed
   // Compact button width, in the same space-units as minWidth/maxWidth so the
   // stretch clamp and Burn Bar's partner cap agree to the pixel.
   readonly property int handleWidth: 34
@@ -235,8 +241,8 @@ BarWidget {
   // Spectrum visuals lifted from ryrobes.beatbar (MIT, Ryan Robitaille).
   // Left click opens the media cockpit; right click cycles the visualization.
 
-  readonly property int configuredWidth: Math.max(72, Math.min(220,
-    Number(setting("width", 112)) || 112))
+  readonly property int configuredWidth: Math.max(48, Math.min(220,
+    Number(setting("width", 88)) || 88))
   readonly property int configuredGain: Math.max(40, Math.min(250,
     Number(setting("gain", 100)) || 100))
   readonly property real visualGain: configuredGain / 100
@@ -260,7 +266,7 @@ BarWidget {
 
   readonly property bool stretch: setting("stretch", true) === true
   readonly property int stretchMinWidth: Math.max(24, Math.min(600,
-    Number(setting("minWidth", 96)) || 96))
+    Number(setting("minWidth", 56)) || 56))
   // While collapsed to the play handle, both floor and ceiling drop to the
   // button width: measureStretch pins us there and Burn Bar reads the same low
   // cap, so the two agree and no blank strip is left between them. Playing, the
@@ -286,11 +292,24 @@ BarWidget {
   // gives ground: a fixed-width widget that refuses to shrink pushes a crowded
   // row into overflow, and then the whole strip scrolls and magnifies under the
   // pointer, which is how a click meant for Beatdeck landed on a neighbour.
+  // What a trailing sibling genuinely needs, in pixels: its own floor if it can
+  // stretch, otherwise the width it is asking for. Duck-typed on the same
+  // properties the bar itself reads, so any stretching widget works.
+  function siblingDemand(item, implicit) {
+    var asking = Number(implicit) || 0
+    if (!item) return asking
+    var stretches = item.stretch === true || typeof item.stretchedWidth === "number"
+    if (!stretches) return asking
+    var floor = Number(item.effectiveMinWidth)
+    if (!(isFinite(floor) && floor > 0)) floor = Number(item.stretchMinWidth)
+    if (!(isFinite(floor) && floor > 0)) floor = Number(item.configuredWidth)
+    if (!(isFinite(floor) && floor > 0)) return asking
+    return Math.min(asking, Style.spaceReal(floor))
+  }
+
   function measureStretch() {
     if (vertical || !bar || !Array.isArray(bar.moduleSlots)) return
 
-    var minimum = Style.spaceReal(effectiveMinWidth)
-    var maximum = Style.spaceReal(stretchMaxWidth)
     var origin
 
     try {
@@ -302,6 +321,7 @@ BarWidget {
 
     var centreLeft = -1
     var trailing = 0
+    var siblingLog = []
 
     for (var i = 0; i < bar.moduleSlots.length; i++) {
       var slot = bar.moduleSlots[i]
@@ -322,8 +342,15 @@ BarWidget {
         if (centreLeft < 0 || point.x < centreLeft) centreLeft = point.x
       } else if (slot.region === "left" && point.x > origin.x) {
         // Trailing left-row siblings: implicitWidth, not width — their x
-        // shifts when we grow, the space they need does not.
-        trailing += Math.max(0, Number(slot.implicitWidth) || 0)
+        // shifts when we grow, the space they need does not. A sibling that
+        // stretches (Burn Bar) is the exception: its implicitWidth is whatever
+        // it has already taken, so counting that would hand it every pixel we
+        // give up and leave us collapsed for good. Charge a stretcher only the
+        // width it actually needs and let it yield the rest, the same way it
+        // reads our cap when we are the one stretching.
+        var demand = Math.max(0, root.siblingDemand(slot.activeItem, slot.implicitWidth))
+        siblingLog.push({ id: String(slot.moduleName || "?"), implicit: slot.implicitWidth, demand: demand })
+        trailing += demand
       }
     }
 
@@ -342,6 +369,22 @@ BarWidget {
     }
 
     var available = boundary - origin.x - trailing - Style.spaceReal(stretchGap)
+
+    // The collapse test is judged against the *configured* minimum, never
+    // against effectiveMinWidth: that one drops to the handle as soon as we
+    // collapse, which would immediately read as "there is room again" and
+    // flip the deck back and forth every frame. `available` itself is measured
+    // from the boundary and the siblings' implicit widths, never from our own
+    // width, so it does not move when we shrink.
+    var floor = Style.spaceReal(handleWidth)
+    var wanted = Math.max(floor, Style.spaceReal(stretchMinWidth))
+    squeezed = !(hideWhenIdle && !playing) && available < wanted
+
+    var minimum = handle ? floor : wanted
+    var maximum = Math.max(minimum, Style.spaceReal(stretchMaxWidth))
+    lastMeasure = { boundary: boundary, origin: origin.x, trailing: trailing,
+      available: available, wanted: wanted, floor: floor, maximum: maximum,
+      squeezed: squeezed, siblings: siblingLog }
     var next = Math.round(clamp(available, minimum, maximum))
 
     // Sub-pixel churn would repaint the canvas every frame for nothing.
@@ -1283,6 +1326,7 @@ BarWidget {
         x: p.x, y: p.y, w: root.width, h: root.height,
         implicitWidth: root.implicitWidth,
         handle: root.handle, stretch: root.stretch,
+        measure: root.lastMeasure,
         playing: root.playing
       })
     }

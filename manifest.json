@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "nixfred.beatdeck",
   "name": "Beatdeck",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "author": "Fred Nix",
   "license": "MIT",
   "description": "Beatbar's live spectrum as the trigger for the Living Media Cockpit \u2014 click for now playing, right click for the visuals",
@@ -27,14 +27,14 @@
     "defaultSection": "center",
     "defaults": {
       "mode": "Aurora",
-      "width": 112,
+      "width": 88,
       "gain": 100,
       "bassMotion": "Subtle",
       "auroraPulse": true,
       "showIdleLine": true,
       "hideWhenIdle": true,
       "stretch": true,
-      "minWidth": 96,
+      "minWidth": 56,
       "maxWidth": 1600,
       "stretchGap": 14,
       "themeColors": true,
@@ -57,11 +57,11 @@
         "key": "width",
         "type": "integer",
         "label": "Width",
-        "min": 72,
+        "min": 48,
         "max": 220,
         "step": 8,
-        "defaultValue": 112,
-        "description": "Fixed width. Ignored while Stretch is on."
+        "defaultValue": 88,
+        "description": "The width the deck asks for. It is a ceiling, not a promise: a crowded row shrinks the deck toward Minimum width, and past that it collapses to its play handle until the room comes back."
       },
       {
         "key": "gain",
@@ -133,8 +133,8 @@
         "min": 24,
         "max": 600,
         "step": 8,
-        "defaultValue": 96,
-        "description": "How far Beatdeck will shrink before it stops giving ground."
+        "defaultValue": 56,
+        "description": "How far Beatdeck will shrink before it gives up and collapses to its play handle. Lower it to hand a crowded bar more room."
       },
       {
         "key": "maxWidth",
