@@ -471,11 +471,25 @@ BarWidget {
     return Qt.rgba(color.r, color.g, color.b, clamp(alpha, 0, 1))
   }
 
+  // Gain with a soft ceiling instead of a hard clamp. cava already runs with
+  // autosens, so its loudest bands sit near 1.0 before any gain is applied. A
+  // hard clamp at the configured maximum (250%) pinned about a third of all
+  // samples to full height, adjacent bands merged into a flat-topped block,
+  // and a playing spectrum read as a dead one. Below the knee a value is left
+  // exactly as gained; above it, it eases toward 1 without ever reaching it,
+  // so a louder band always still draws taller than a quieter one.
+  function softLimit(value) {
+    var knee = 0.6
+    var v = Math.max(0, Number(value) || 0)
+    if (v <= knee) return v
+    return knee + (1 - knee) * (1 - Math.exp(-(v - knee) / (1 - knee)))
+  }
+
   function scaledBands() {
     var source = spectrum && Array.isArray(spectrum.bands) ? spectrum.bands : []
     var values = []
     for (var i = 0; i < source.length; i++)
-      values.push(clamp(Number(source[i] || 0) * visualGain, 0, 1))
+      values.push(softLimit(Number(source[i] || 0) * visualGain))
     return values
   }
 

@@ -46,6 +46,8 @@ ok "all qml files import QtQuick and balance their braces"
 echo "== theme palette =="
 command -v node >/dev/null || fail "node is required for the palette tests"
 node tests/test_theme_palette.cjs >/dev/null 2>&1 || fail "theme palette tests"
+node --test tests/test_soft_limit.cjs >/dev/null 2>&1 || fail "spectrum soft limit tests"
+ok "spectrum gain never flattens a playing spectrum"
 ok "palette parses, hues are in range, snapping wraps the colour circle"
 
 echo
