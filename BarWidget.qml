@@ -997,18 +997,127 @@ BarWidget {
             maskSource: coverMask
           }
 
-          Rectangle {
+          // No cover art (Cliamp's radio streams publish none): a cyberpunk
+          // record pressed for whichever player is on, spun by the same timer
+          // as a real sleeve. Drawn once per size change; the Item rotates, the
+          // canvas never repaints per frame.
+          Item {
+            id: neonRecord
             anchors.fill: parent
-            radius: width / 2
             visible: coverSource.status !== Image.Ready
-            color: Qt.rgba(root.cockpitAccent.r, root.cockpitAccent.g,
-              root.cockpitAccent.b, 0.32)
+            readonly property string pressing: root.activePlayer
+              ? String(root.activePlayer.identity || root.activePlayer.desktopEntry || "NEON").toUpperCase()
+              : "NEON"
+            readonly property color neonA: "#ff2bd6"
+            readonly property color neonB: "#22e4ff"
+            readonly property color neonC: "#f7ff4a"
+
+            Canvas {
+              id: neonCanvas
+              anchors.fill: parent
+              antialiasing: true
+              onWidthChanged: requestPaint()
+              onHeightChanged: requestPaint()
+              onPaint: {
+                var c = getContext("2d")
+                var w = width, h = height
+                c.reset()
+                c.clearRect(0, 0, w, h)
+                if (w <= 0 || h <= 0) return
+                var cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2
+
+                // Vinyl body: near-black with a violet sheen.
+                var body = c.createRadialGradient(cx, cy, r * 0.1, cx, cy, r)
+                body.addColorStop(0, "#1a0b2e")
+                body.addColorStop(0.55, "#0b0714")
+                body.addColorStop(1, "#050308")
+                c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2)
+                c.fillStyle = body; c.fill()
+
+                // Grooves.
+                for (var g = r * 0.47; g < r * 0.97; g += r * 0.018) {
+                  c.beginPath(); c.arc(cx, cy, g, 0, Math.PI * 2)
+                  c.strokeStyle = "rgba(160, 120, 255, 0.07)"
+                  c.lineWidth = 1; c.stroke()
+                }
+
+                // Neon light catching the grooves: glowing arc segments.
+                function neonArc(radius, start, sweep, color, width) {
+                  c.save()
+                  c.shadowColor = color; c.shadowBlur = r * 0.09
+                  c.beginPath(); c.arc(cx, cy, radius, start, start + sweep)
+                  c.strokeStyle = color; c.lineWidth = width; c.lineCap = "round"
+                  c.stroke()
+                  c.restore()
+                }
+                neonArc(r * 0.90, -0.35, 0.95, neonRecord.neonA, r * 0.028)
+                neonArc(r * 0.80, 2.60, 0.70, neonRecord.neonB, r * 0.022)
+                neonArc(r * 0.70, 4.35, 0.55, neonRecord.neonA, r * 0.016)
+                neonArc(r * 0.62, 1.10, 0.40, neonRecord.neonC, r * 0.012)
+                neonArc(r * 0.95, 3.40, 0.35, neonRecord.neonB, r * 0.012)
+
+                // Glitch ticks across the playing surface.
+                c.save()
+                c.globalAlpha = 0.55
+                for (var t = 0; t < 7; t++) {
+                  var a = t * 0.9 + 0.4
+                  var r0 = r * (0.52 + (t % 3) * 0.13)
+                  c.beginPath()
+                  c.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0)
+                  c.lineTo(cx + Math.cos(a) * (r0 + r * 0.07), cy + Math.sin(a) * (r0 + r * 0.07))
+                  c.strokeStyle = t % 2 ? neonRecord.neonB : neonRecord.neonA
+                  c.lineWidth = r * 0.012
+                  c.stroke()
+                }
+                c.restore()
+
+                // Label: magenta to cyan, with a scanline grid.
+                var lr = r * 0.44
+                var label = c.createLinearGradient(cx - lr, cy - lr, cx + lr, cy + lr)
+                label.addColorStop(0, neonRecord.neonA)
+                label.addColorStop(1, neonRecord.neonB)
+                c.beginPath(); c.arc(cx, cy, lr, 0, Math.PI * 2)
+                c.fillStyle = label; c.fill()
+                c.save()
+                c.beginPath(); c.arc(cx, cy, lr, 0, Math.PI * 2); c.clip()
+                c.strokeStyle = "rgba(10, 4, 20, 0.28)"
+                c.lineWidth = 1
+                for (var y = cy - lr; y < cy + lr; y += r * 0.04) {
+                  c.beginPath(); c.moveTo(cx - lr, y); c.lineTo(cx + lr, y); c.stroke()
+                }
+                c.restore()
+                c.beginPath(); c.arc(cx, cy, lr, 0, Math.PI * 2)
+                c.strokeStyle = "rgba(255, 255, 255, 0.55)"
+                c.lineWidth = r * 0.012; c.stroke()
+
+                // Outer rim.
+                c.beginPath(); c.arc(cx, cy, r - 1, 0, Math.PI * 2)
+                c.strokeStyle = "rgba(255, 43, 214, 0.35)"
+                c.lineWidth = 2; c.stroke()
+              }
+            }
+
             Text {
-              anchors.centerIn: parent
-              text: "󰎆"
-              color: root.foreground
+              anchors.horizontalCenter: parent.horizontalCenter
+              // Inside the label: it spans ±22% of the record, the hub ±8%.
+              y: parent.height * 0.5 - parent.height * 0.19
+              text: neonRecord.pressing
+              color: "#0a0414"
               font.family: root.bar ? root.bar.fontFamily : Style.font.family
-              font.pixelSize: Style.font.displayLarge * 2
+              font.pixelSize: parent.height * 0.06
+              font.bold: true
+              font.letterSpacing: parent.height * 0.006
+            }
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              y: parent.height * 0.5 + parent.height * 0.1
+              text: "NEON · 33⅓"
+              color: "#0a0414"
+              opacity: 0.85
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.pixelSize: parent.height * 0.038
+              font.letterSpacing: parent.height * 0.004
             }
           }
 
@@ -1303,6 +1412,7 @@ BarWidget {
         error: engine.lastError,
         source: engine.sinkMonitorSource,
         playerCount: engine.players.length,
+        busPlayers: engine.busPlayers.map(function(p) { return p.identity + (p.isPlaying ? " playing" : "") }),
         player: engine.activePlayer ? {
           identity: engine.activePlayer.identity || "",
           title: engine.activePlayer.trackTitle || "",

@@ -102,7 +102,15 @@ Item {
   // its idle play button while music was audibly playing. Owning an MPRIS
   // read here is the same fix already applied to the cava analyzer above: the
   // widget on the bar is enough to drive everything it shows.
-  readonly property var players: Mpris.players ? Mpris.players.values : []
+  readonly property var mprisPlayers: Mpris.players ? Mpris.players.values : []
+  // Quickshell 0.3.1 does not reliably pick up a player that registers on the
+  // bus after the shell started: a Cliamp restarted mid-session stayed missing
+  // from Mpris.players (and from pi.media, which uses the same service) while
+  // it was audibly playing, so the cockpit fell back to an idle Brave tab and
+  // said "Nothing playing". busPlayers is a plain D-Bus poll that fills in any
+  // player Quickshell does not list, with the same property and method names.
+  property var busPlayers: []
+  readonly property var players: mprisPlayers.concat(busPlayers)
   property int playerRevision: 0
   readonly property var activePlayer: {
     playerRevision // re-select when any player's state changes, not just the list
@@ -173,7 +181,7 @@ Item {
   // stops playing, or swaps track. Watch each live player and bump a revision
   // the activePlayer binding depends on.
   Instantiator {
-    model: root.players
+    model: root.mprisPlayers
     delegate: QtObject {
       required property var modelData
       readonly property Connections watcher: Connections {
@@ -183,6 +191,92 @@ Item {
         function onTrackArtistChanged() { root.playerRevision++ }
       }
     }
+  }
+
+  function busSuffix(name) {
+    return String(name || "").replace(/^org\.mpris\.MediaPlayer2\./, "")
+  }
+
+  // One poll result line -> a player object shaped like Quickshell's
+  // MprisPlayer, for the handful of members Beatdeck reads and calls.
+  function makeBusPlayer(entry) {
+    var name = String(entry.name || "")
+    var props = entry.player && entry.player.data && entry.player.data[0] ? entry.player.data[0] : {}
+    function v(key, fallback) {
+      return props[key] && props[key].data !== undefined ? props[key].data : fallback
+    }
+    var meta = v("Metadata", {})
+    function m(key) {
+      var item = meta[key]
+      if (!item || item.data === undefined) return ""
+      return Array.isArray(item.data) ? item.data.join(", ") : String(item.data)
+    }
+    var status = String(v("PlaybackStatus", "Stopped"))
+    var lengthUs = Number(meta["mpris:length"] ? meta["mpris:length"].data : 0) || 0
+    var basePosition = (Number(v("Position", 0)) || 0) / 1000000
+    var polledAt = Date.now()
+    var playing = status === "Playing"
+
+    function call(method) {
+      Quickshell.execDetached(["busctl", "--user", "call", name, "/org/mpris/MediaPlayer2",
+        "org.mpris.MediaPlayer2.Player", method])
+      busPoll.soon()
+    }
+
+    var player = {
+      dbusName: name,
+      identity: entry.identity && entry.identity.data ? String(entry.identity.data) : busSuffix(name),
+      desktopEntry: "",
+      trackTitle: m("xesam:title"),
+      trackArtist: m("xesam:artist"),
+      trackAlbum: m("xesam:album"),
+      trackArtUrl: m("mpris:artUrl"),
+      isPlaying: playing,
+      canControl: v("CanControl", false) === true,
+      canGoNext: v("CanGoNext", false) === true,
+      canGoPrevious: v("CanGoPrevious", false) === true,
+      canPlay: v("CanPlay", false) === true,
+      canPause: v("CanPause", false) === true,
+      canTogglePlaying: v("CanPlay", false) === true || v("CanPause", false) === true,
+      canSeek: false,
+      lengthSupported: lengthUs > 0,
+      length: lengthUs / 1000000,
+      positionSupported: props.Position !== undefined,
+      positionChanged: function() {},
+      next: function() { call("Next") },
+      previous: function() { call("Previous") },
+      play: function() { call("Play") },
+      pause: function() { call("Pause") },
+      togglePlaying: function() { call("PlayPause") },
+      signature: name + "|" + status + "|" + m("xesam:title") + "|" + m("xesam:artist")
+        + "|" + m("mpris:artUrl")
+    }
+    // Extrapolated between polls so the progress bar moves smoothly.
+    Object.defineProperty(player, "position", {
+      get: function() { return playing ? basePosition + (Date.now() - polledAt) / 1000 : basePosition },
+      set: function(value) {}
+    })
+    return player
+  }
+
+  function applyBusPoll(lines) {
+    var known = {}
+    for (var i = 0; i < mprisPlayers.length; i++) {
+      var p = mprisPlayers[i]
+      if (p) known[busSuffix(p.dbusName)] = true
+    }
+    var next = []
+    for (var j = 0; j < lines.length; j++) {
+      var entry
+      try { entry = JSON.parse(lines[j]) } catch (e) { continue }
+      if (!entry || !entry.name || known[busSuffix(entry.name)]) continue
+      next.push(makeBusPlayer(entry))
+    }
+    // Only replace the list when something a viewer can see changed, so the
+    // cockpit is not rebuilt on every poll just because Position ticked.
+    var before = busPlayers.map(function(p) { return p.signature }).join("\n")
+    var after = next.map(function(p) { return p.signature }).join("\n")
+    if (before !== after) busPlayers = next
   }
 
   function zeroBands() {
@@ -355,6 +449,36 @@ Item {
       root.writeRuntimeConfig()
       analyzer.running = true
     }
+  }
+
+  Process {
+    id: busPoll
+    property var pending: []
+    function soon() { busPollTimer.interval = 350; busPollTimer.restart() }
+    command: ["bash", "-c",
+      "for n in $(busctl --user list --no-legend 2>/dev/null | awk '$1 ~ /^org[.]mpris[.]MediaPlayer2[.]/ {print $1}'); do "
+      + "p=$(busctl --user -j call \"$n\" /org/mpris/MediaPlayer2 org.freedesktop.DBus.Properties GetAll s org.mpris.MediaPlayer2.Player 2>/dev/null) || continue; "
+      + "i=$(busctl --user -j get-property \"$n\" /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2 Identity 2>/dev/null); "
+      + "printf '{\"name\":\"%s\",\"player\":%s,\"identity\":%s}\\n' \"$n\" \"$p\" \"${i:-null}\"; "
+      + "done"]
+    stdout: SplitParser {
+      onRead: function(line) { busPoll.pending.push(line) }
+    }
+    onStarted: pending = []
+    onExited: {
+      root.applyBusPoll(pending)
+      pending = []
+      busPollTimer.interval = 2000
+      busPollTimer.restart()
+    }
+  }
+
+  Timer {
+    id: busPollTimer
+    interval: 1200
+    repeat: false
+    running: true
+    onTriggered: if (!busPoll.running) busPoll.running = true
   }
 
   Timer {
