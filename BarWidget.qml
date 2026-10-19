@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Ui
 import qs.Commons
+import qs.Commons as Commons
 
 BarWidget {
   id: root
@@ -25,7 +26,7 @@ BarWidget {
   readonly property string album: activePlayer ? (activePlayer.trackAlbum || "") : ""
   readonly property string artUrl: activePlayer ? (activePlayer.trackArtUrl || "") : ""
   readonly property string playIcon: playing ? "󰏤" : "󰐊"
-  readonly property color foreground: bar ? bar.barForeground : Color.foreground
+  readonly property color foreground: bar ? bar.barForeground : Commons.Color.foreground
   readonly property color cockpitAccent: Qt.lighter(palette.accent, 1.22)
   readonly property real bass: spectrum ? Number(spectrum.bass || 0) : 0
 
@@ -189,7 +190,7 @@ BarWidget {
   AlbumPalette {
     id: palette
     sourceUrl: root.artUrl
-    fallback: Color.accent
+    fallback: Commons.Color.accent
     themeHues: root.themeColors ? root.themeHues : []
     remoteArt: root.remoteArt
   }
@@ -436,10 +437,10 @@ BarWidget {
     return ["Off", "Subtle", "Loose"].indexOf(value) >= 0 ? value : "Subtle"
   }
 
-  readonly property color themeForeground: bar ? bar.barForeground : Color.foreground
-  readonly property color themeAccent: Color.accent
-  readonly property color themeMuted: Color.muted
-  readonly property color themeUrgent: Color.urgent
+  readonly property color themeForeground: bar ? bar.barForeground : Commons.Color.foreground
+  readonly property color themeAccent: Commons.Color.accent
+  readonly property color themeMuted: Commons.Color.muted
+  readonly property color themeUrgent: Commons.Color.urgent
 
   property real beatGlow: 0
   property real kickEnergy: 0
@@ -876,7 +877,7 @@ BarWidget {
       anchors.fill: parent
       radius: Math.max(Style.cornerRadius, Style.space(16))
       clip: false
-      color: Color.background
+      color: Commons.Color.background
 
       Image {
         id: backdropSource

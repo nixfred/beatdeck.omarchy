@@ -1,12 +1,13 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 Item {
   id: root
 
   property string icon: ""
-  property color foreground: Color.foreground
-  property color accent: Color.accent
+  property color foreground: Commons.Color.foreground
+  property color accent: Commons.Color.accent
   property bool primary: false
   property bool controlEnabled: true
   property real reveal: 1
@@ -59,7 +60,7 @@ Item {
     anchors.centerIn: parent
     text: root.icon
     textFormat: Text.PlainText
-    color: root.primary ? Color.background : root.foreground
+    color: root.primary ? Commons.Color.background : root.foreground
     font.family: Style.font.family
     font.pixelSize: root.primary ? Style.font.display : Style.font.iconLarge
   }

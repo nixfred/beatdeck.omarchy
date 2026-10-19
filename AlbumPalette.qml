@@ -1,12 +1,13 @@
 import QtQuick
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 
 Item {
   id: root
 
   property string sourceUrl: ""
-  property color fallback: Color.accent
+  property color fallback: Commons.Color.accent
   property color sampled: fallback
   // Hues the active theme actually contains, from the widget. Empty means the
   // theme shipped no colors.toml, or the user turned theme colours off; either

@@ -1,12 +1,13 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 Item {
   id: root
 
   property var spectrum: null
-  property color accent: Color.accent
-  property color foreground: Color.foreground
+  property color accent: Commons.Color.accent
+  property color foreground: Commons.Color.foreground
   property real reveal: 1
   property bool playing: false
   property real beatFlash: 0
